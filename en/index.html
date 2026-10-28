@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>buildingSMART Knowledge Map</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300&display=swap');
+
+  :root {
+    --bg: #ffffff;
+    --bg-panel: #f5f6f8;
+    --bg-panel-hover: #eceef2;
+    --border: #e0e3ea;
+    --text: #1a1f2e;
+    --text-dim: #6b7280;
+    --accent-blue: #2563eb;
+    --accent-teal: #0d9488;
+    --accent-violet: #7c3aed;
+    --accent-amber: #d97706;
+    --accent-rose: #e11d48;
+    --accent-green: #16a34a;
+    --cat-standard: #2563eb;
+    --cat-tjeneste: #0d9488;
+    --cat-iso19650: #7c3aed;
+    --cat-ns8360: #d97706;
+    --cat-tillegg: #e11d48;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: transparent;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+  }
+
+  .km-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    max-height: 700px;
+    min-height: 480px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  #graph-container {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: 16px;
+  }
+
+  svg {
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+  }
+  svg:active { cursor: grabbing; }
+
+  /* Grid background */
+  #graph-container::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
+    background-size: 40px 40px, 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+    border-radius: 16px;
+  }
+
+  /* Header */
+  .header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(180deg, var(--bg) 60%, transparent);
+    pointer-events: none;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .header > * { pointer-events: auto; }
+
+  .logo {
+    font-family: 'DM Sans', sans-serif; font-weight: 600;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent-blue);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .search-box {
+    position: relative;
+    max-width: 320px;
+    flex: 1;
+  }
+
+  .search-box input {
+    width: 100%;
+    padding: 10px 16px 10px 40px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .search-box input:focus {
+    border-color: var(--accent-blue);
+  }
+
+  .search-box::before {
+    content: '⌕';
+    position: absolute;
+    left: 14px;
+    top: 11px;
+    color: var(--text-dim);
+    font-size: 16px;
+    pointer-events: none;
+  }
+
+  .search-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+    display: none;
+    z-index: 400;
+  }
+
+  .search-dropdown.visible {
+    display: block;
+  }
+
+  .search-dropdown-item {
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: background 0.12s;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .search-dropdown-item:last-child {
+    border-bottom: none;
+  }
+
+  .search-dropdown-item:first-child {
+    border-radius: 10px 10px 0 0;
+  }
+
+  .search-dropdown-item:last-child {
+    border-radius: 0 0 10px 10px;
+  }
+
+  .search-dropdown-item:only-child {
+    border-radius: 10px;
+  }
+
+  .search-dropdown-item:hover {
+    background: var(--bg-panel);
+  }
+
+  .search-dropdown-item .sdi-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .search-dropdown-item .sdi-abbr {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text);
+    min-width: 48px;
+  }
+
+  .search-dropdown-item .sdi-name {
+    font-size: 13px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .search-dropdown-item .sdi-cat {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    opacity: 0.7;
+  }
+
+  .search-dropdown-empty {
+    padding: 14px 16px;
+    font-size: 13px;
+    color: var(--text-dim);
+    text-align: center;
+  }
+
+  /* Category filters */
+  .filters {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .filter-btn {
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+    color: var(--text-dim);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .filter-btn:hover {
+    background: var(--bg-panel-hover);
+    color: var(--text);
+  }
+
+  .filter-btn.active {
+    border-color: var(--cat-color, var(--accent-blue));
+    color: var(--cat-color, var(--accent-blue));
+    background: color-mix(in srgb, var(--cat-color, var(--accent-blue)) 10%, var(--bg-panel));
+  }
+
+  /* Detail panel */
+  .detail-panel {
+    position: absolute;
+    right: -460px;
+    top: 0;
+    bottom: 0;
+    width: 400px;
+    max-width: 85%;
+    background: #ffffff;
+    border-left: 1px solid var(--border);
+    box-shadow: -8px 0 30px rgba(0,0,0,0.08);
+    z-index: 200;
+    transition: right 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 0 16px 16px 0;
+  }
+
+  .detail-panel.open {
+    right: 0;
+  }
+
+  .detail-header {
+    padding: 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .detail-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+  .detail-close:hover {
+    background: var(--bg-panel-hover);
+    color: var(--text);
+  }
+
+  .detail-abbr {
+    font-family: 'DM Sans', sans-serif; font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .detail-title {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  .detail-category {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .detail-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+    line-height: 1.7;
+    font-size: 14px;
+    color: var(--text-dim);
+  }
+
+  .detail-body p {
+    margin-bottom: 14px;
+  }
+
+  .detail-body strong {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .detail-section-title {
+    font-family: 'DM Sans', sans-serif; font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 20px 0 10px;
+  }
+
+  .related-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .related-tag {
+    padding: 4px 12px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: #ffffff;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .related-tag:hover {
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+  }
+
+  /* Tooltip */
+  .tooltip {
+    position: absolute;
+    padding: 10px 14px;
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 300;
+    max-width: 260px;
+  }
+
+  .tooltip .tt-abbr {
+    font-family: 'DM Sans', sans-serif; font-weight: 600;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .tooltip .tt-name {
+    font-size: 14px;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+
+  .tooltip .tt-hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  /* Legend */
+  .legend {
+    position: absolute;
+    bottom: 12px;
+    left: 16px;
+    z-index: 100;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  /* Stats */
+  .stats {
+    position: absolute;
+    bottom: 12px;
+    right: 16px;
+    z-index: 100;
+    font-family: 'DM Sans', sans-serif; font-weight: 600;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+
+  /* Node styles in SVG */
+  .node { cursor: pointer; }
+  .node circle {
+    transition: r 0.2s, stroke-width 0.2s;
+  }
+  .node:hover circle {
+    stroke-width: 3;
+  }
+  .node text {
+    font-family: 'DM Sans', sans-serif; font-weight: 600;
+    font-size: 10px;
+    fill: var(--text);
+    pointer-events: none;
+    text-anchor: middle;
+    dominant-baseline: central;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .node .node-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 9px;
+    fill: var(--text-dim);
+    font-weight: 300;
+  }
+
+  .link {
+    stroke: rgba(0,0,0,0.06);
+    stroke-width: 1;
+    transition: stroke 0.2s, stroke-width 0.2s;
+  }
+  .link.highlighted {
+    stroke: rgba(37,99,235,0.35);
+    stroke-width: 2;
+  }
+
+  .node.dimmed circle { opacity: 0.15; }
+  .node.dimmed text { opacity: 0.1; }
+  .link.dimmed { opacity: 0.03; }
+
+  @media (max-width: 768px) {
+    .header { padding: 10px 12px; flex-wrap: wrap; gap: 8px; }
+    .search-box { max-width: 100%; order: 3; }
+    .detail-panel { width: 100%; max-width: 100%; border-radius: 0; }
+    .legend { bottom: 6px; left: 10px; gap: 8px; }
+    .legend-item { font-size: 10px; }
+    .stats { display: none; }F
+    .filters { gap: 4px; }
+    .filter-btn { padding: 4px 10px; font-size: 11px; }
+    .logo { font-size: 12px; }
+  }
+
+  @media (max-width: 1024px) {
+    .km-wrapper { max-height: 600px; min-height: 450px; }
+    .header { padding: 12px 16px; gap: 10px; }
+    .search-box { max-width: 280px; }
+    .detail-panel { width: 380px; max-width: 90%; }
+    .legend { gap: 10px; }
+    .legend-item { font-size: 11px; }
+    .filters { gap: 5px; }
+    .filter-btn { padding: 5px 12px; font-size: 11px; }
+  }
+
+  @media (max-width: 480px) {
+    .km-wrapper { height: auto; max-height: none; min-height: 400px; border-radius: 8px; }
+    .header { padding: 8px 10px; gap: 6px; }
+    .search-box input { padding: 8px 12px 8px 36px; font-size: 13px; }
+    .search-box::before { left: 12px; top: 9px; font-size: 14px; }
+    .filters { flex-wrap: wrap; }
+    .filter-btn { padding: 3px 8px; font-size: 10px; }
+    .detail-panel { border-radius: 0; }
+    .legend { gap: 6px; }
+    .legend-item { font-size: 9px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="km-wrapper" id="km-wrapper">
+
+<div class="header">
+  <div class="search-box">
+    <input type="text" id="search" placeholder="Search for a term or abbreviation…" autocomplete="off">
+    <div class="search-dropdown" id="search-dropdown"></div>
+  </div>
+  <div class="filters" id="filters"></div>
+</div>
+
+<div id="graph-container">
+  <svg id="svg"></svg>
+</div>
+
+<div class="detail-panel" id="detail-panel">
+  <div class="detail-header">
+    <div>
+      <div class="detail-abbr" id="detail-abbr"></div>
+      <div class="detail-title" id="detail-title"></div>
+      <div class="detail-category" id="detail-category"></div>
+    </div>
+    <button class="detail-close" id="detail-close">✕</button>
+  </div>
+  <div class="detail-body" id="detail-body"></div>
+</div>
+
+<div class="tooltip" id="tooltip">
+  <div class="tt-abbr" id="tt-abbr"></div>
+  <div class="tt-name" id="tt-name"></div>
+  <div class="tt-hint">Click for details</div>
+</div>
+
+<div class="legend" id="legend"></div>
+<div class="stats" id="stats"></div>
+
+</div><!-- end km-wrapper -->
+
+<script>
+// ============================================================
+// DATA — Add new terms here!
+// Hver node trenger: id, name, abbr (forkortelse), category, description
+// Koblinger (links): source → target med valgfri label
+// ============================================================
+
+const CATEGORIES = {
+  "standard":   { label: "buildingSMART standard",  color: "#2563eb" },
+  "tjeneste":   { label: "buildingSMART service",   color: "#0d9488" },
+  "iso19650":   { label: "NS-EN ISO 19650",          color: "#7c3aed" },
+  "ns8360":     { label: "NS 8360",                   color: "#d97706" },
+  "tillegg":    { label: "Additional terms",           color: "#e11d48" },
+};
+
+const nodes = [
+  // buildingSMART-standarder
+  {
+    id: "ifc", abbr: "IFC", name: "Industry Foundation Classes",
+    category: "standard",
+    description: `<p>IFC is an ISO standard (NS-EN ISO 16739) that has been adopted in both European and Norwegian standardisation. IFC is an international standard for built asset information that makes it possible to exchange information about buildings and infrastructure so that sender and receiver share the same understanding of what an object is, where it is, what type it is and what its properties are.</p>
+    <p><strong>Formats:</strong> .ifc (STEP Physical Format/SPF), ifcXML and others.</p>
+    <p><strong>Versions:</strong> IFC2x3, IFC4, IFC4.3 (latest). IFC4.3 also covers bridges, roads, railways, waterways and ports. IFC 4.4 is under development (tunnels). The next generation, IFC5, will be based on a modern data model architecture.</p>`
+  },
+  {
+    id: "bcf", abbr: "BCF", name: "BIM Collaboration Format",
+    category: "standard",
+    description: `<p>BCF is a process format that makes it possible to communicate issues in the context of the model, showing the current location and the objects concerned.</p>
+    <p>BCF makes it possible to report an issue, show other parties the situation and which objects the issue relates to, and describe the issue using text and images, among other things.</p>`
+  },
+  {
+    id: "ids", abbr: "IDS", name: "Information Delivery Specification",
+    category: "standard",
+    description: `<p>IDS is an open format for describing alphanumeric requirements for the model. IDS can set requirements for the structure, units and values of information.</p>
+    <p>It can be used, among other things, to automatically check the model's alphanumeric information against agreed requirements.</p>
+    <p><em>Alphanumeric = information expressed in numbers or letters.</em></p>`
+  },
+  {
+    id: "bsdd", abbr: "bSDD", name: "buildingSMART Data Dictionary",
+    category: "tjeneste",
+    description: `<p>bSDD is buildingSMART's platform that brings together data dictionaries. Data dictionaries contain unambiguous definitions of concepts.</p>
+    <p>bSDD ensures that sender and receiver have the same understanding of information, also in the long term. bSDD makes it possible to translate concepts between languages and data models in a way that both people and machines can interpret.</p>`
+  },
+  {
+    id: "validation", abbr: "IFC Val.", name: "IFC Validation Service",
+    category: "tjeneste",
+    description: `<p>A service that checks IFC files against the formal requirements of the standard, and verifies whether the information follows the technical structure defined for a given IFC version.</p>
+    <p>The validation service is particularly useful for newer versions of IFC, such as IFC4.3, where certification schemes are still under development. Validation does not replace certification or functional testing, but is an important supplement.</p>`
+  },
+  {
+    id: "opencde", abbr: "openCDE", name: "open Common Data Environment API",
+    category: "tjeneste",
+    description: `<p>A standardised set of interfaces (APIs) that make it easier to exchange and share information between different common data environments (CDE). These APIs ensure interoperability between different systems.</p>
+    <p><strong>Includes:</strong> Foundation API, Documents API, BCF API and bSDD API.</p>`
+  },
+
+  // ISO 19650-begreper
+  {
+    id: "pim", abbr: "PIM", name: "Project Information Model",
+    category: "iso19650",
+    description: `<p>A formal model used in the project phase to meet the appointing party's exchange information requirements (EIR) in accordance with the agreed BIM execution plan (BEP).</p>
+    <p>The PIM ensures that all project information is structured and up to date. All design disciplines with main responsibility for building elements produce their own discipline models. The discipline lead is formally responsible for each discipline's PIM.</p>`
+  },
+  {
+    id: "aim", abbr: "AIM", name: "Asset Information Model",
+    category: "iso19650",
+    description: `<p>A model used in the operational phase to use and manage information about the built asset. The AIM is critical for efficient operation and maintenance.</p>
+    <p>As a minimum, the AIM requires geometric models to be integrated into the facility management system. The terms AIM and digital twin are often used interchangeably, but a digital twin requires real-time updating.</p>`
+  },
+  {
+    id: "oir", abbr: "OIR", name: "Organization Information Requirements",
+    category: "iso19650",
+    description: `<p>Information needs related to the appointing organisation's high-level strategic objectives.</p>
+    <p>These requirements may arise from strategic business operations, asset management, portfolio planning, statutory obligations or policy making.</p>`
+  },
+  {
+    id: "air", abbr: "AIR", name: "Asset Information Requirements",
+    category: "iso19650",
+    description: `<p>Information needs for managing the built asset. The AIR is very important for ensuring efficient asset management.</p>
+    <p>Projects must prioritise delivering the necessary information, including information models that represent what has actually been built.</p>`
+  },
+  {
+    id: "pir", abbr: "PIR", name: "Project Information Requirements",
+    category: "iso19650",
+    description: `<p>The PIR explains the information needed to answer the appointing party's strategic objectives in relation to a particular project.</p>
+    <p>A set of information requirements should be prepared for each of the appointing party's key decision points during the project.</p>`
+  },
+  {
+    id: "eir", abbr: "EIR", name: "Exchange Information Requirements",
+    category: "iso19650",
+    description: `<p>A compilation of information requirements for an appointment, including OIR, AIR and PIR.</p>
+    <p>The EIR defines in detail which information is to be delivered and exchanged between parties. It covers the information standard, methods, procedures, level of information need, information protocol, shared resources and a description of the CDE.</p>`
+  },
+  {
+    id: "bep", abbr: "BEP", name: "BIM Execution Plan",
+    category: "iso19650",
+    description: `<p>A plan that describes how information will be managed and exchanged in the project in accordance with the requirements expressed in the EIR.</p>
+    <p>The BEP ensures that all parties agree on how the delivery team will meet the appointing party's requirements. The lead appointed party's project manager is responsible for preparing the BEP.</p>`
+  },
+  {
+    id: "loin", abbr: "LOIN", name: "Level of Information Need",
+    category: "iso19650",
+    description: `<p>The level of information need describes the level of information required to meet specific needs in a project. It defines all perspectives of the specific information.</p>
+    <p>It should always describe a specific purpose, who will deliver, when and how. It can describe requirements for geometric information, alphanumeric information and documentation.</p>`
+  },
+  {
+    id: "cde", abbr: "CDE", name: "Common Data Environment",
+    category: "iso19650",
+    description: `<p>A shared digital platform for storing and exchanging project information. The CDE ensures that all project participants have access to the same information.</p>
+    <p>The appointing party's IT manager or CDE manager is responsible for administering and maintaining the CDE.</p>`
+  },
+  {
+    id: "tidp", abbr: "TIDP", name: "Task Information Delivery Plan",
+    category: "iso19650",
+    description: `<p>A detailed plan describing what information is to be delivered, by whom, and when in the project.</p>
+    <p>The TIDP is important for ensuring that all necessary information is delivered at the right time. Each individual task team is responsible for its own TIDP.</p>`
+  },
+  {
+    id: "midp", abbr: "MIDP", name: "Master Information Delivery Plan",
+    category: "iso19650",
+    description: `<p>An overarching plan that brings together all the task plans (TIDP) for delivering information in the project.</p>
+    <p>The MIDP provides a combined overview of information deliveries. The project manager or BIM manager is responsible for the MIDP.</p>`
+  },
+
+  // NS 8360-begreper
+  {
+    id: "lod", abbr: "LOD", name: "Level of Development",
+    category: "ns8360",
+    description: `<p>Describes requirements for the gradual enrichment and maturity of the model with information. LOD ensures that information in the model is developed in an agreed way.</p>
+    <p>LOD is described by the level of information need (LOIN) and the master information delivery plan (MIDP).</p>`
+  },
+  {
+    id: "prostatuskode", abbr: "PSC", name: "Process status code",
+    category: "ns8360",
+    description: `<p>A code used to indicate the status of a process or activity, for example whether it is in progress, completed or approved.</p>
+    <p>Process status codes are important for monitoring and managing progress in the project.</p>`
+  },
+  {
+    id: "duplikat", abbr: "DuplicateOwnedBy", name: "Duplicate object",
+    category: "ns8360",
+    description: `<p>This property indicates that the object is a copy, typically in the architect's model, and that another discipline is responsible for designing and documenting the object.</p>
+    <p>The value is given as a discipline abbreviation: ARK, LARK, IARK, RIB, RIBr, RIV, RIVA, RIE etc.</p>
+    <p><em>Property set: NONS_Process.DuplicateOwnedBy</em></p>`
+  },
+  {
+    id: "egenskapssett", abbr: "CPS", name: "Custom property sets",
+    category: "ns8360",
+    description: `<p>Specific sets of properties defined to meet particular needs in the project. Custom property sets are important for ensuring that all necessary information is included in the model.</p>
+    <p>The BIM manager or project manager is responsible for defining and maintaining these property sets.</p>`
+  },
+  {
+    id: "prosessinfo", abbr: "PPI", name: "Properties for process information",
+    category: "ns8360",
+    description: `<p>Specific properties describing information related to the various processes in the project. These properties are important for ensuring that processes are well documented and can be followed up.</p>
+    <p>The project manager or document controller is responsible for defining and maintaining the properties for process information.</p>`
+  },
+  {
+    id: "isprocured", abbr: "IsProcured", name: "Procured",
+    category: "ns8360",
+    description: `<p>A property indicating whether a specific component, service or resource has been procured. This is a binary property that typically has the values “Yes” or “No”.</p>
+    <p>Knowing whether something has been procured is important for tracking purchases and ensuring that the necessary resources are available when needed.</p>
+    <p><em>Property set: NONS_Process.IsProcured</em></p>`
+  },
+  {
+    id: "milestone", abbr: "Milestone", name: "Milestone",
+    category: "ns8360",
+    description: `<p>A property representing important events or milestones in the project. This can include the completion of specific phases, approvals or other critical points in the project timeline.</p>
+    <p>Milestones help monitor the project's progress and keep it on track.</p>
+    <p><em>Property set: NONS_Process.Milestone</em></p>`
+  },
+  {
+    id: "controlvolume", abbr: "ControlVolume", name: "Control volume",
+    category: "ns8360",
+    description: `<p>A property that defines a specific area or volume within the project that is subject to control or specific restrictions. These may be areas with special safety requirements, quality controls or other conditions that must be met.</p>
+    <p>Control volumes are important for ensuring that specific requirements are met within defined areas of the project.</p>
+    <p><em>Property set: NONS_Process.ControlVolume</em></p>`
+  },
+
+  // Tillegg
+  {
+    id: "bim", abbr: "BIM", name: "Building Information Modelling",
+    category: "tillegg",
+    description: `<p>Short for <strong>Building Information Modelling</strong>. The use of a shared digital representation of a built asset as a reliable basis for decisions.</p>
+    <p>Used for design, construction and operational processes. Applies to buildings, transport and other infrastructure.</p>
+    <p>BIM can include geometry, alphanumeric* information and documentation.</p>
+    <p><em>* Alphanumeric = information expressed in numbers or letters</em></p>`
+  },
+  {
+    id: "strukturert", abbr: "S.I", name: "Structured information",
+    category: "tillegg",
+    description: `<p>Data that is organised and formatted so that it can easily be stored, searched, filtered and analysed by computers. It follows a fixed structure, such as tables or datasets with predefined fields.</p>
+    <p><strong>Examples:</strong> IFC files, datasets from databases, information defined in a data dictionary.</p>`
+  },
+  {
+    id: "ustrukturert", abbr: "U.I", name: "Unstructured information",
+    category: "tillegg",
+    description: `<p>Data that is not organised in a fixed way, and often does not fit into a predefined structure. It can be harder to process with traditional methods.</p>
+    <p><strong>Examples:</strong> PDF documents, email correspondence, images and sketches.</p>
+    <p>Artificial intelligence can to some extent derive structured information from unstructured information.</p>`
+  },
+  {
+    id: "aapenbim", abbr: "openBIM", name: "openBIM",
+    category: "tillegg",
+    description: `<p>To digitalise the construction industry, we depend on the best services and solutions coming out on top. We achieve this when they can be offered and procured independently of technology platform.</p>
+    <p>Open standards are necessary for a free flow of data between different solutions, and thereby enable free competition between services and solutions. Open standards also ensure that information can be moved between platforms, so information owners are not locked into one ecosystem.</p>
+    <p>Open standards ensure ownership of and access to your own information.</p>`
+  },
+  {
+    id: "bsi", abbr: "bSI", name: "buildingSMART International",
+    category: "tillegg",
+    description: `<p>An international membership organisation, founded and owned by national/regional Chapters.</p>
+    <p>buildingSMART International develops and maintains international technical standards and services that are central to the openBIM workflow concept.</p>`
+  },
+  {
+    id: "bsn", abbr: "bSN", name: "buildingSMART Norway",
+    category: "tillegg",
+    description: `<p>A Norwegian membership organisation working to digitalise the construction industry based on open standards. buildingSMART Norway is a Chapter of, and therefore a co-owner of, buildingSMART International.</p>
+    <p>buildingSMART Norway helps its members and the Norwegian industry succeed in going digital based on open formats and standards. We do this by being the voice in the industry that stands up for open formats and standards.</p>
+    <p>We organise all active members in domains and working groups. They share experiences and find solutions to common challenges. And we inform and develop guidelines, requirements specifications and templates that make it easier to use openBIM.</p>`
+  },
+];
+
+const links = [
+  // Standards relationships
+  { source: "ifc", target: "bcf", label: "works with" },
+  { source: "ifc", target: "ids", label: "validated by" },
+  { source: "ifc", target: "bsdd", label: "enriched by" },
+  { source: "ifc", target: "validation", label: "checked by" },
+  { source: "ids", target: "bsdd", label: "refers to" },
+  { source: "bcf", target: "opencde", label: "part of API" },
+  { source: "bsdd", target: "opencde", label: "part of API" },
+  { source: "opencde", target: "cde", label: "connects" },
+
+  // ISO 19650 info flow
+  { source: "oir", target: "eir", label: "part of" },
+  { source: "air", target: "eir", label: "part of" },
+  { source: "pir", target: "eir", label: "part of" },
+  { source: "eir", target: "bep", label: "answered by" },
+  { source: "eir", target: "pim", label: "defines requirements for" },
+  { source: "bep", target: "pim", label: "governs delivery of" },
+  { source: "pim", target: "aim", label: "handed over to" },
+  { source: "air", target: "aim", label: "defines requirements for" },
+  { source: "loin", target: "eir", label: "part of" },
+  { source: "cde", target: "pim", label: "stores" },
+  { source: "cde", target: "aim", label: "stores" },
+  { source: "tidp", target: "midp", label: "compiled in" },
+  { source: "midp", target: "bep", label: "part of" },
+
+  // NS 8360
+  { source: "lod", target: "loin", label: "described by" },
+  { source: "lod", target: "midp", label: "described by" },
+  { source: "prostatuskode", target: "prosessinfo", label: "type of" },
+  { source: "duplikat", target: "prosessinfo", label: "type of" },
+  { source: "isprocured", target: "prosessinfo", label: "type of" },
+  { source: "milestone", target: "prosessinfo", label: "type of" },
+  { source: "controlvolume", target: "prosessinfo", label: "type of" },
+  { source: "prosessinfo", target: "egenskapssett", label: "part of" },
+  { source: "egenskapssett", target: "pim", label: "enriches" },
+  { source: "lod", target: "pim", label: "governs detail in" },
+
+  // Standards ↔ ISO 19650
+  { source: "ifc", target: "pim", label: "format for" },
+  { source: "ifc", target: "aim", label: "format for" },
+  { source: "ids", target: "eir", label: "machine-readable part of" },
+
+  // Tillegg
+  { source: "strukturert", target: "ifc", label: "example" },
+  { source: "strukturert", target: "bsdd", label: "defined in" },
+  { source: "ustrukturert", target: "strukturert", label: "opposite of" },
+
+  // BIM og buildingSMART
+  { source: "bim", target: "aapenbim", label: "realised through" },
+  { source: "aapenbim", target: "ifc", label: "based on" },
+  { source: "bsi", target: "aapenbim", label: "develops standards for" },
+  { source: "bsi", target: "ifc", label: "develops" },
+  { source: "bsi", target: "bsdd", label: "develops" },
+  { source: "bsn", target: "bsi", label: "chapter of" },
+  { source: "bsn", target: "aapenbim", label: "promotes" },
+];
+
+
+// ============================================================
+// RENDER
+// ============================================================
+
+const svg = d3.select("#svg");
+const wrapper = document.getElementById("km-wrapper");
+const width = wrapper.clientWidth;
+const height = wrapper.clientHeight;
+
+// Zoom
+const g = svg.append("g");
+const zoom = d3.zoom()
+  .scaleExtent([0.2, 4])
+  .on("zoom", (e) => g.attr("transform", e.transform));
+svg.call(zoom);
+
+// Arrow markers
+const defs = svg.append("defs");
+Object.entries(CATEGORIES).forEach(([key, cat]) => {
+  defs.append("marker")
+    .attr("id", `arrow-${key}`)
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 28)
+    .attr("refY", 0)
+    .attr("markerWidth", 6)
+    .attr("markerHeight", 6)
+    .attr("orient", "auto")
+    .append("path")
+    .attr("d", "M0,-4L10,0L0,4")
+    .attr("fill", cat.color)
+    .attr("opacity", 0.3);
+});
+
+// Glow filters
+Object.entries(CATEGORIES).forEach(([key, cat]) => {
+  const filter = defs.append("filter").attr("id", `glow-${key}`);
+  filter.append("feGaussianBlur").attr("stdDeviation", "3").attr("result", "blur");
+  filter.append("feFlood").attr("flood-color", cat.color).attr("flood-opacity", "0.15");
+  filter.append("feComposite").attr("in2", "blur").attr("operator", "in");
+  const merge = filter.append("feMerge");
+  merge.append("feMergeNode");
+  merge.append("feMergeNode").attr("in", "SourceGraphic");
+});
+
+// Simulation
+const simulation = d3.forceSimulation(nodes)
+  .force("link", d3.forceLink(links).id(d => d.id).distance(120).strength(0.4))
+  .force("charge", d3.forceManyBody().strength(-600))
+  .force("center", d3.forceCenter(width / 2, height / 2))
+  .force("collision", d3.forceCollide().radius(40))
+  .force("x", d3.forceX(width / 2).strength(0.03))
+  .force("y", d3.forceY(height / 2).strength(0.03));
+
+// Links
+const link = g.append("g")
+  .selectAll("line")
+  .data(links)
+  .join("line")
+  .attr("class", "link");
+
+// Nodes
+const node = g.append("g")
+  .selectAll("g")
+  .data(nodes)
+  .join("g")
+  .attr("class", "node")
+  .call(d3.drag()
+    .on("start", dragStart)
+    .on("drag", dragging)
+    .on("end", dragEnd));
+
+// Node circles
+node.append("circle")
+  .attr("r", d => d.category === "standard" || d.category === "tjeneste" ? 24 : 20)
+  .attr("fill", d => {
+    const c = CATEGORIES[d.category].color;
+    return `color-mix(in srgb, ${c} 10%, #ffffff)`;
+  })
+  .attr("stroke", d => CATEGORIES[d.category].color)
+  .attr("stroke-width", 1.5)
+  .attr("filter", d => `url(#glow-${d.category})`);
+
+// Node labels (abbreviation)
+node.append("text")
+  .attr("dy", d => d.abbr === "—" ? 0 : -2)
+  .text(d => d.abbr === "—" ? "•" : d.abbr)
+  .style("font-size", d => {
+    const len = d.abbr.length;
+    if (len <= 3) return "10px";
+    if (len <= 5) return "8px";
+    return "7px";
+  });
+
+// Node name below
+node.append("text")
+  .attr("class", "node-label")
+  .attr("dy", d => (d.category === "standard" || d.category === "tjeneste" ? 24 : 20) + 14)
+  .text(d => d.name.length > 28 ? d.name.slice(0, 26) + "…" : d.name);
+
+// Simulation tick
+simulation.on("tick", () => {
+  link
+    .attr("x1", d => d.source.x)
+    .attr("y1", d => d.source.y)
+    .attr("x2", d => d.target.x)
+    .attr("y2", d => d.target.y);
+  node.attr("transform", d => `translate(${d.x},${d.y})`);
+});
+
+// ============================================================
+// INTERACTIONS
+// ============================================================
+
+const tooltip = document.getElementById("tooltip");
+const panel = document.getElementById("detail-panel");
+const activeFilters = new Set();
+
+// Helper: get visible node IDs based on active filters
+function getFilteredVisible() {
+  if (activeFilters.size === 0) return null; // null = no filter active
+  const visible = new Set();
+  nodes.forEach(n => {
+    if (activeFilters.has(n.category)) visible.add(n.id);
+  });
+  return visible;
+}
+
+// Hover
+node.on("mouseover", (event, d) => {
+  const tt = document.getElementById("tooltip");
+  document.getElementById("tt-abbr").textContent = d.abbr === "—" ? "" : d.abbr;
+  document.getElementById("tt-name").textContent = d.name;
+  tt.style.opacity = 1;
+  const rect = wrapper.getBoundingClientRect();
+  tt.style.left = (event.clientX - rect.left + 16) + "px";
+  tt.style.top = (event.clientY - rect.top - 10) + "px";
+
+  // Highlight connected
+  const connected = new Set();
+  connected.add(d.id);
+  links.forEach(l => {
+    const sid = typeof l.source === "object" ? l.source.id : l.source;
+    const tid = typeof l.target === "object" ? l.target.id : l.target;
+    if (sid === d.id) connected.add(tid);
+    if (tid === d.id) connected.add(sid);
+  });
+
+  const filtered = getFilteredVisible();
+
+  node.classed("dimmed", n => {
+    if (filtered && !filtered.has(n.id)) return true;
+    return !connected.has(n.id);
+  });
+  link.classed("dimmed", l => {
+    const sid = typeof l.source === "object" ? l.source.id : l.source;
+    const tid = typeof l.target === "object" ? l.target.id : l.target;
+    if (filtered && (!filtered.has(sid) || !filtered.has(tid))) return true;
+    return sid !== d.id && tid !== d.id;
+  });
+  link.classed("highlighted", l => {
+    const sid = typeof l.source === "object" ? l.source.id : l.source;
+    const tid = typeof l.target === "object" ? l.target.id : l.target;
+    if (filtered && (!filtered.has(sid) || !filtered.has(tid))) return false;
+    return sid === d.id || tid === d.id;
+  });
+})
+.on("mousemove", (event) => {
+  const rect = wrapper.getBoundingClientRect();
+  tooltip.style.left = (event.clientX - rect.left + 16) + "px";
+  tooltip.style.top = (event.clientY - rect.top - 10) + "px";
+})
+.on("mouseout", () => {
+  tooltip.style.opacity = 0;
+  link.classed("highlighted", false);
+  // Re-apply filters instead of blanket reset
+  applyFilters();
+});
+
+// Click → detail panel
+node.on("click", (event, d) => {
+  event.stopPropagation();
+  openDetail(d);
+});
+
+svg.on("click", () => closeDetail());
+
+function openDetail(d) {
+  const cat = CATEGORIES[d.category];
+  document.getElementById("detail-abbr").textContent = d.abbr === "—" ? "" : d.abbr;
+  document.getElementById("detail-abbr").style.color = cat.color;
+  document.getElementById("detail-title").textContent = d.name;
+
+  const catEl = document.getElementById("detail-category");
+  catEl.textContent = cat.label;
+  catEl.style.background = `color-mix(in srgb, ${cat.color} 10%, #ffffff)`;
+  catEl.style.color = cat.color;
+
+  // Related nodes
+  const related = [];
+  links.forEach(l => {
+    const sid = typeof l.source === "object" ? l.source.id : l.source;
+    const tid = typeof l.target === "object" ? l.target.id : l.target;
+    if (sid === d.id) {
+      const n = nodes.find(x => x.id === tid);
+      if (n) related.push({ node: n, label: l.label, dir: "→" });
+    }
+    if (tid === d.id) {
+      const n = nodes.find(x => x.id === sid);
+      if (n) related.push({ node: n, label: l.label, dir: "←" });
+    }
+  });
+
+  let relatedHTML = "";
+  if (related.length > 0) {
+    relatedHTML = `<div class="detail-section-title">Connections</div><div class="related-list">`;
+    related.forEach(r => {
+      const rCat = CATEGORIES[r.node.category];
+      relatedHTML += `<span class="related-tag" data-id="${r.node.id}" style="border-color: ${rCat.color}40; color: ${rCat.color}">${r.dir} ${r.node.abbr !== "—" ? r.node.abbr : r.node.name}${r.label ? ` (${r.label})` : ''}</span>`;
+    });
+    relatedHTML += `</div>`;
+  }
+
+  document.getElementById("detail-body").innerHTML =
+    d.description + relatedHTML;
+
+  // Related tag clicks
+  document.querySelectorAll(".related-tag").forEach(tag => {
+    tag.addEventListener("click", () => {
+      const target = nodes.find(n => n.id === tag.dataset.id);
+      if (target) openDetail(target);
+    });
+  });
+
+  panel.classList.add("open");
+}
+
+function closeDetail() {
+  panel.classList.remove("open");
+}
+
+document.getElementById("detail-close").addEventListener("click", (e) => {
+  e.stopPropagation();
+  closeDetail();
+});
+
+// ============================================================
+// SEARCH
+// ============================================================
+
+const searchInput = document.getElementById("search");
+const searchDropdown = document.getElementById("search-dropdown");
+
+searchInput.addEventListener("input", (e) => {
+  const q = e.target.value.toLowerCase().trim();
+  
+  if (!q) {
+    searchDropdown.classList.remove("visible");
+    searchDropdown.innerHTML = "";
+    // Reset graph dimming (respect filters)
+    applyFilters();
+    return;
+  }
+
+  // Find matching nodes
+  const matches = nodes.filter(n =>
+    n.name.toLowerCase().includes(q) ||
+    n.abbr.toLowerCase().includes(q) ||
+    n.id.includes(q)
+  );
+
+  // Build dropdown
+  if (matches.length === 0) {
+    searchDropdown.innerHTML = `<div class="search-dropdown-empty">No results for “${e.target.value}”</div>`;
+  } else {
+    searchDropdown.innerHTML = matches.map(n => {
+      const cat = CATEGORIES[n.category];
+      const abbrDisplay = n.abbr === "—" ? "" : n.abbr;
+      return `<div class="search-dropdown-item" data-id="${n.id}">
+        <span class="sdi-dot" style="background:${cat.color}"></span>
+        <span class="sdi-abbr">${abbrDisplay}</span>
+        <span class="sdi-name">${n.name}</span>
+        <span class="sdi-cat">${cat.label}</span>
+      </div>`;
+    }).join("");
+  }
+
+  searchDropdown.classList.add("visible");
+
+  // Attach click handlers
+  searchDropdown.querySelectorAll(".search-dropdown-item").forEach(item => {
+    item.addEventListener("click", () => {
+      const target = nodes.find(n => n.id === item.dataset.id);
+      if (target) {
+        openDetail(target);
+        searchDropdown.classList.remove("visible");
+        searchInput.value = "";
+        // Highlight only this node and its connections
+        highlightNode(target);
+      }
+    });
+  });
+
+  // Dim graph to show only matches
+  const matchIds = new Set(matches.map(n => n.id));
+  node.classed("dimmed", n => !matchIds.has(n.id));
+  link.classed("dimmed", () => true);
+  link.classed("highlighted", false);
+});
+
+// Close dropdown on outside click
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".search-box")) {
+    searchDropdown.classList.remove("visible");
+  }
+});
+
+// Close dropdown on Escape
+searchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    searchDropdown.classList.remove("visible");
+    searchInput.value = "";
+    applyFilters();
+  }
+});
+
+// Helper: highlight a single node and its connections
+function highlightNode(d) {
+  const connected = new Set();
+  connected.add(d.id);
+  links.forEach(l => {
+    const sid = typeof l.source === "object" ? l.source.id : l.source;
+    const tid = typeof l.target === "object" ? l.target.id : l.target;
+    if (sid === d.id) connected.add(tid);
+    if (tid === d.id) connected.add(sid);
+  });
+
+  node.classed("dimmed", n => !connected.has(n.id));
+  link.classed("dimmed", l => {
+    const sid = typeof l.source === "object" ? l.source.id : l.source;
+    const tid = typeof l.target === "object" ? l.target.id : l.target;
+    return sid !== d.id && tid !== d.id;
+  });
+  link.classed("highlighted", l => {
+    const sid = typeof l.source === "object" ? l.source.id : l.source;
+    const tid = typeof l.target === "object" ? l.target.id : l.target;
+    return sid === d.id || tid === d.id;
+  });
+}
+
+// ============================================================
+// FILTERS
+// ============================================================
+
+const filtersEl = document.getElementById("filters");
+
+Object.entries(CATEGORIES).forEach(([key, cat]) => {
+  const btn = document.createElement("button");
+  btn.className = "filter-btn";
+  btn.textContent = cat.label;
+  btn.style.setProperty("--cat-color", cat.color);
+  btn.addEventListener("click", () => {
+    if (activeFilters.has(key)) {
+      activeFilters.delete(key);
+      btn.classList.remove("active");
+    } else {
+      activeFilters.add(key);
+      btn.classList.add("active");
+    }
+    applyFilters();
+  });
+  filtersEl.appendChild(btn);
+});
+
+function applyFilters() {
+  if (activeFilters.size === 0) {
+    node.classed("dimmed", false);
+    link.classed("dimmed", false);
+    return;
+  }
+
+  const visible = new Set();
+  nodes.forEach(n => {
+    if (activeFilters.has(n.category)) visible.add(n.id);
+  });
+
+  node.classed("dimmed", n => !visible.has(n.id));
+  link.classed("dimmed", l => {
+    const sid = typeof l.source === "object" ? l.source.id : l.source;
+    const tid = typeof l.target === "object" ? l.target.id : l.target;
+    return !visible.has(sid) || !visible.has(tid);
+  });
+}
+
+// ============================================================
+// LEGEND & STATS
+// ============================================================
+
+const legendEl = document.getElementById("legend");
+Object.values(CATEGORIES).forEach(cat => {
+  const item = document.createElement("div");
+  item.className = "legend-item";
+  item.innerHTML = `<div class="legend-dot" style="background:${cat.color}"></div>${cat.label}`;
+  legendEl.appendChild(item);
+});
+
+document.getElementById("stats").textContent =
+  `${nodes.length} terms · ${links.length} connections`;
+
+// ============================================================
+// DRAG
+// ============================================================
+
+function dragStart(event, d) {
+  if (!event.active) simulation.alphaTarget(0.3).restart();
+  d.fx = d.x;
+  d.fy = d.y;
+}
+
+function dragging(event, d) {
+  d.fx = event.x;
+  d.fy = event.y;
+}
+
+function dragEnd(event, d) {
+  if (!event.active) simulation.alphaTarget(0);
+  d.fx = null;
+  d.fy = null;
+}
+
+// Initial zoom to fit
+setTimeout(() => {
+  svg.transition().duration(800).call(
+    zoom.transform,
+    d3.zoomIdentity.translate(width * 0.05, height * 0.05).scale(0.9)
+  );
+}, 500);
+</script>
+</body>
+</html>
